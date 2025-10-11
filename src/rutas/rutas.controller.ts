@@ -14,21 +14,21 @@ export class RutasController {
   constructor(private readonly rutasService: RutasService) {}
 
   @Get('tecnico')
-async obtenerRutasTecnico(
-  @Query('usuario') usuario: string,
-  @Query('fecha') fecha: string
-) {
-  const fechaValida = dayjs(fecha, 'YYYY-MM-DD', true);
+  async obtenerRutasTecnico(
+    @Query('usuario') usuario: string,
+    @Query('fecha') fecha: string
+  ) {
+    const fechaValida = dayjs(fecha, 'YYYY-MM-DD', true);
 
-  if (!fechaValida.isValid()) {
-    throw new BadRequestException('Formato de fecha inválido. Usa YYYY-MM-DD');
+    if (!fechaValida.isValid()) {
+      throw new BadRequestException('Formato de fecha inválido. Usa YYYY-MM-DD');
+    }
+
+    return this.rutasService.obtenerRutasTecnico(
+      usuario,
+      fechaValida.format('YYYY-MM-DD')
+    );
   }
-
-  return this.rutasService.obtenerRutasTecnico(
-    usuario,
-    fechaValida.format('YYYY-MM-DD')
-  );
-}
   @Get('estados')
   async obtenerEstados() {
     return this.rutasService.obtenerEstados();

@@ -4,21 +4,30 @@ export interface Ruta {
   id_ruta: number;                          // r.id_ruta
   fecha: string;                            // r.fecha
   estado_ruta: number;                      // r.id_estado_ruta
+  estado_servicio_id: number;               // p.id_estado
   estado_servicio_desc: string;             // e.estado_desc
+  subestado_servicio_id: number;            // p.id_subestado
   subestado_servicio_desc?: string | null;  // s.subestado_desc (puede ser null)
   tecnico: string;                          // t.nombre
   direccion: string;                        // c.direccion
   distrito: string;                         // c.distrito
+  codigo_postal: string;                   // c.codigo_postal
   telefono: string;                         // c.telefono
   nombre_cliente: string;                   // c.nombre_cliente
+  num_doc_cliente: string;                  // c.num_doc_cliente
   referencia?: string | null;               // c.referencia
   id_pedido: number;                        // p.id_pedido
   sku_producto: string;                     // p.sku_producto
   sku_producto_desc: string;                // p.sku_producto_desc
   sku_servicio: string;                     // p.sku_servicio
+  sku_servicio_desc: string;                // p.sku_servicio_desc
   turno: string;                            // p.turno
-  fecha_servicio: string;                   // alias r.fecha AS fecha_servicio
   observacion_servicio?: string | null;     // p.observacion_servicio
+  nueva_observacion?: string | null;       // p.nueva_observacion
+  info_addicional?: string | null;      // p.info_adicional,
+  nom_persona_atendio?: string | null; // p.nom_persona_atendio
+  num_doc_persona_atendio?: string | null; // p.num_doc_persona_atendio
+  firmado?: boolean; // p.firmado
 }
 export interface Estado { idEstado: number; estadoDesc: string; }
 
@@ -33,17 +42,19 @@ export class RutasService {
 
   async obtenerRutasTecnico(id_tecnico: string, fecha: string): Promise<Ruta[]> {
     const query = `
-          SELECT r.id_ruta, r.fecha,r.id_estado_ruta as estado_ruta, e.estado_desc as estado_servicio_desc,s.subestado_desc as subestado_servicio_desc, t.nombre AS tecnico,c.direccion,c.distrito,c.telefono,c.nombre_cliente,c.referencia, p.id_pedido,
-  p.sku_producto, p.sku_producto_desc,p.sku_servicio, p.sku_servicio,p.turno,r.fecha as fecha_servicio,
-  p.observacion_servicio
+          SELECT r.id_ruta, TO_CHAR(r.fecha, 'DD/MM/YYYY') as fecha,r.id_estado_ruta as estado_ruta,
+                 p.id_estado as estado_servicio_id, e.estado_desc as estado_servicio_desc, p.id_subestado as subestado_servicio_id, s.subestado_desc as subestado_servicio_desc, 
+                 t.nombre AS tecnico,c.direccion,c.distrito,c.codigo_postal,c.telefono,c.nombre_cliente,c.num_documento as num_doc_cliente,c.referencia,
+                 p.id_pedido,p.sku_producto, p.sku_producto_desc,p.sku_servicio, p.sku_servicio_desc,p.turno,
+                 p.observacion_servicio, p.nueva_observacion,p.info_adicional, p.nom_persona_atendio, p.num_doc_persona_atendio, p.firmado
         FROM rutas r
        inner JOIN tecnicos t ON r.id_tecnico = t.id_tecnico
       inner JOIN ruta_pedidos rt on r.id_ruta=rt.id_ruta
       inner join pedidos p on rt.id_pedido=p.id_pedido
       inner join clientes c on p.id_cliente=c.id_cliente
-	  left join estados e on p.id_estado=e.id_estado
+	    left join estados e on p.id_estado=e.id_estado
       left join sub_estados s on p.id_subestado=s.id_subestado
-        WHERE t.usuario = $1
+        WHERE t.id_tecnico = $1
           AND DATE(r.fecha) =  $2
         ORDER BY r.fecha DESC;
 
