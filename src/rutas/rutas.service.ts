@@ -380,7 +380,7 @@ export class RutasService {
     }
 
     const buffer = fs.readFileSync(file.path);
-    const fileName = `upc/firma_${idRuta}_${Date.now()}.jpg`;
+    const fileName = `upc/${idRuta}_${Date.now()}.jpg`;
     const urlDestino = `https://awsbucket-upcmov.s3.us-east-1.amazonaws.com/${fileName}`;
 
    
