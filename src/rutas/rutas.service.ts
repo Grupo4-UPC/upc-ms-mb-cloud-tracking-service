@@ -7,6 +7,10 @@ import { Pool } from "pg";
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { ActualizarPedidoDto } from "./dto/actualizar-pedido.dto";
 import fs from 'fs';
+  InternalServerErrorException,
+} from "@nestjs/common";
+import { Pool } from "pg";
+import { ActualizarPedidoDto } from "./dto/actualizar-pedido.dto";
 export interface Ruta {
   id_ruta: number; // r.id_ruta
   fecha: string; // r.fecha
@@ -348,6 +352,7 @@ export class RutasService {
         const queryUpdateRuta = `
           UPDATE rutas 
           SET  id_estado_ruta = $1
+          SET fecha = CURRENT_DATE, id_estado_ruta = $1
           WHERE id_ruta = $2
         `;
         await this.pool.query(queryUpdateRuta, [datos.id_estado, id_ruta]);

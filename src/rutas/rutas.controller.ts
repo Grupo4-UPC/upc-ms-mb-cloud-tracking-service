@@ -3,6 +3,10 @@ import { RutasService } from './rutas.service';
 import dayjs from 'dayjs';
 import { ActualizarPedidoDto } from './dto/actualizar-pedido.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Controller, Get, Param, Query, BadRequestException, Put, Body } from '@nestjs/common';
+import { RutasService } from './rutas.service';
+import dayjs from 'dayjs';
+import { ActualizarPedidoDto } from './dto/actualizar-pedido.dto';
 
 export enum EstadoRuta {
   PENDIENTE = 'PENDIENTE',
@@ -42,6 +46,7 @@ export class RutasController {
   }
 
   
+
   @Get('estados')
   async obtenerEstados() {
     return this.rutasService.obtenerEstados();
