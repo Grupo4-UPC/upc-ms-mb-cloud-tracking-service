@@ -1,10 +1,12 @@
 import {
   Injectable,
   Inject,
-  InternalServerErrorException,
+  InternalServerErrorException,BadRequestException
 } from "@nestjs/common";
 import { Pool } from "pg";
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { ActualizarPedidoDto } from "./dto/actualizar-pedido.dto";
+import fs from 'fs';
 export interface Ruta {
   id_ruta: number; // r.id_ruta
   fecha: string; // r.fecha
@@ -34,6 +36,40 @@ export interface Ruta {
   num_doc_persona_atendio?: string | null; // p.num_doc_persona_atendio
   firmado?: boolean; // p.firmado
 }
+export interface RutaDetalle {
+  id_ruta: number;
+  fecha: string;
+  estado_ruta: number;
+  tecnico: string;
+  direccion: string;
+  distrito: string;
+  codigo_postal: string;
+  telefono: string;
+  nombre_cliente: string;
+  num_doc_cliente: string;
+  referencia: string;
+  firmas: string[];
+  fotos: string[];
+  pedido: {
+    id_pedido: number;
+    sku_producto: string;
+    sku_producto_desc: string;
+    sku_servicio: string;
+    sku_servicio_desc: string;
+    turno: string;
+    observacion_servicio: string;
+    nueva_observacion: string;
+    info_adicional: string;
+    nom_persona_atendio: string;
+    num_doc_persona_atendio: string;
+    firmado: boolean;
+    estado_servicio_id: number;
+    estado_servicio_desc: string;
+    subestado_servicio_id: number;
+    subestado_servicio_desc: string;
+  };
+}
+
 export interface Estado {
   idEstado: number;
   estadoDesc: string;
@@ -46,6 +82,8 @@ export interface SubEstado {
 }
 @Injectable()
 export class RutasService {
+   private readonly s3 = new S3Client({ region: 'us-east-1', credentials: undefined });
+  private readonly bucket = 'awsbucket-upcmov';
   constructor(@Inject("PG_POOL") private pool: Pool) {}
 
   async obtenerRutasTecnico(
@@ -73,6 +111,85 @@ export class RutasService {
     const result = await this.pool.query(query, [id_tecnico, fecha]);
     return result.rows as Ruta[];
   }
+  async obtenerDetalleRuta(id_ruta: number): Promise<RutaDetalle | null> {
+  const query = `
+    SELECT 
+      r.id_ruta,
+      TO_CHAR(r.fecha, 'DD/MM/YYYY') AS fecha,
+      r.id_estado_ruta AS estado_ruta,
+      t.nombre AS tecnico,
+      c.direccion, c.distrito, c.codigo_postal, c.telefono, 
+      c.nombre_cliente, c.num_documento AS num_doc_cliente, c.referencia,
+      p.id_pedido, p.sku_producto, p.sku_producto_desc, p.sku_servicio, 
+      p.sku_servicio_desc, p.turno, p.observacion_servicio, p.nueva_observacion,
+      p.info_adicional, p.nom_persona_atendio, p.num_doc_persona_atendio, p.firmado,
+      p.id_estado AS estado_servicio_id, e.estado_desc AS estado_servicio_desc,
+      p.id_subestado AS subestado_servicio_id, s.subestado_desc AS subestado_servicio_desc,
+      fc.url_foto AS firma_url,
+      ef.url_foto AS foto_url
+    FROM rutas r
+    INNER JOIN tecnicos t ON r.id_tecnico = t.id_tecnico
+    INNER JOIN ruta_pedidos rt ON r.id_ruta = rt.id_ruta
+    INNER JOIN pedidos p ON rt.id_pedido = p.id_pedido
+    INNER JOIN clientes c ON p.id_cliente = c.id_cliente
+    LEFT JOIN estados e ON p.id_estado = e.id_estado
+    LEFT JOIN sub_estados s ON p.id_subestado = s.id_subestado
+    LEFT JOIN ruta_evidencia_foto ef ON r.id_ruta = ef.id_ruta
+    LEFT JOIN ruta_firma_cliente fc ON r.id_ruta = fc.id_ruta
+    WHERE r.id_ruta = $1
+  `;
+
+  const result = await this.pool.query(query, [id_ruta]);
+  const rows = result.rows;
+
+  if (rows.length === 0) return null;
+
+  // Tomamos la primera fila para los datos del pedido y ruta
+  const row = rows[0];
+
+  // Sets para evitar duplicados en firmas y fotos
+  const firmasSet = new Set<string>();
+  const fotosSet = new Set<string>();
+
+  rows.forEach(r => {
+    if (r.firma_url) firmasSet.add(r.firma_url);
+    if (r.foto_url) fotosSet.add(r.foto_url);
+  });
+
+  return {
+    id_ruta: row.id_ruta,
+    fecha: row.fecha,
+    estado_ruta: row.estado_ruta,
+    tecnico: row.tecnico,
+    direccion: row.direccion,
+    distrito: row.distrito,
+    codigo_postal: row.codigo_postal,
+    telefono: row.telefono,
+    nombre_cliente: row.nombre_cliente,
+    num_doc_cliente: row.num_doc_cliente,
+    referencia: row.referencia,
+    firmas: Array.from(firmasSet),
+    fotos: Array.from(fotosSet),
+    pedido: {
+      id_pedido: row.id_pedido,
+      sku_producto: row.sku_producto,
+      sku_producto_desc: row.sku_producto_desc,
+      sku_servicio: row.sku_servicio,
+      sku_servicio_desc: row.sku_servicio_desc,
+      turno: row.turno,
+      observacion_servicio: row.observacion_servicio,
+      nueva_observacion: row.nueva_observacion,
+      info_adicional: row.info_adicional,
+      nom_persona_atendio: row.nom_persona_atendio,
+      num_doc_persona_atendio: row.num_doc_persona_atendio,
+      firmado: row.firmado,
+      estado_servicio_id: row.estado_servicio_id,
+      estado_servicio_desc: row.estado_servicio_desc,
+      subestado_servicio_id: row.subestado_servicio_id,
+      subestado_servicio_desc: row.subestado_servicio_desc,
+    }
+  };
+}
   async obtenerEstados(): Promise<Estado[]> {
     const query = `
       SELECT id_estado, estado_desc 
@@ -230,7 +347,7 @@ export class RutasService {
       if (datos.id_estado !== undefined) {
         const queryUpdateRuta = `
           UPDATE rutas 
-          SET fecha = CURRENT_DATE, id_estado_ruta = $1
+          SET  id_estado_ruta = $1
           WHERE id_ruta = $2
         `;
         await this.pool.query(queryUpdateRuta, [datos.id_estado, id_ruta]);
@@ -256,4 +373,38 @@ export class RutasService {
       throw new InternalServerErrorException(error.message);
     }
   }
+   async subirFirma(idRuta: number, file: Express.Multer.File,tipo: 'firma' | 'evidencia'
+) {
+    if (!file) {
+      throw new BadRequestException('No se ha recibido ningún archivo');
+    }
+
+    const buffer = fs.readFileSync(file.path);
+    const fileName = `upc/firma_${idRuta}_${Date.now()}.jpg`;
+    const urlDestino = `https://awsbucket-upcmov.s3.us-east-1.amazonaws.com/${fileName}`;
+
+   
+    const response = await fetch(urlDestino, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/jpeg' },
+      body: buffer,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error al subir: ${await response.text()}`);
+    }
+    const tabla = tipo === 'firma' ? 'ruta_firma_cliente' : 'ruta_evidencia_foto';
+
+
+     await this.pool.query(
+      `
+      INSERT INTO public.${tabla} (id_ruta, url_foto, fecha_creacion)
+      VALUES ($1, $2, CURRENT_DATE)
+      `,
+      [idRuta, urlDestino],
+    );
+
+    return { message: '✅ Archivo subido correctamente', url: urlDestino };
+  }
+
 }
