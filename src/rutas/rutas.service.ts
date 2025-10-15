@@ -347,7 +347,7 @@ export class RutasService {
       if (datos.id_estado !== undefined) {
         const queryUpdateRuta = `
           UPDATE rutas 
-          SET fecha = CURRENT_DATE, id_estado_ruta = $1
+          SET  id_estado_ruta = $1
           WHERE id_ruta = $2
         `;
         await this.pool.query(queryUpdateRuta, [datos.id_estado, id_ruta]);
